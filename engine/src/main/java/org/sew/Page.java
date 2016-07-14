@@ -4,13 +4,19 @@ import java.util.Map;
 
 public interface Page {
 
+    void async(ResultHandler handler);
+
     void async();
 
     Result sync();
 
+    Page basicAuth(String username, String password);
+
     Page rootPath(String rootPath);
 
     Page cookie(String key, String value);
+
+    Page header(String key, String value);
 
     Page param(String key, String value);
 
@@ -22,12 +28,18 @@ public interface Page {
 
     Page https(String host, int port);
 
-    byte[] content();
-
-    String strContent();
-
     Page get(String path);
 
     Page post(String path);
+
+    Page delete(String path);
+
+    Page put(String path);
+
+    Result result();
+
+    interface ResultHandler {
+        void handle(Result result);
+    }
 
 }

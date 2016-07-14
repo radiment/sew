@@ -1,6 +1,5 @@
 package org.sew;
 
-import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.io.RuntimeIOException;
 
 import java.io.IOException;
@@ -8,16 +7,14 @@ import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.sew.Methods.GET;
-import static org.sew.Methods.POST;
+import static org.sew.Methods.*;
 
 public class HttpPage implements Page {
-
-    ContentResponse response;
 
     private HttpSewEngine engine;
     private String protocol = "http";
@@ -28,10 +25,14 @@ public class HttpPage implements Page {
     private Methods method = GET;
     private Map<String, String> params;
     private Map<String, String> headers;
+    private ResultHandler handler;
+    private Result result;
+    private byte[] credentials;
 
-    protected HttpPage(HttpSewEngine engine) {
+    HttpPage(HttpSewEngine engine) {
         this.engine = engine;
         this.params = new HashMap<>();
+        this.headers = new HashMap<>();
     }
 
     private void reset() {
@@ -39,22 +40,65 @@ public class HttpPage implements Page {
     }
 
     @Override
+    public void async(ResultHandler handler) {
+        this.handler = handler;
+        async();
+    }
+
+    @Override
     public void async() {
+        this.engine.executorService.submit(() -> {
+            try {
+                makeRequest();
+                if (this.handler != null) {
+                    this.handler.handle(result);
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
 
     }
 
     @Override
     public Result sync() {
         try {
-            URL url = new URL(protocol, host, port, makePath());
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod(method.name());
-            setParams(connection);
-            connection.connect();
-            reset();
-            return new HttpResult(connection);
+            makeRequest();
+            return result;
         } catch (IOException e) {
             throw new RuntimeIOException(e);
+        }
+    }
+
+    @Override
+    public Page basicAuth(String username, String password) {
+        try {
+            credentials = (username + ":" + password).getBytes("UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeIOException(e);
+        }
+        return this;
+    }
+
+    private void makeRequest() throws IOException {
+        URL url = new URL(protocol, host, port, makePath());
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setRequestMethod(method.name());
+        setHeaders(connection);
+        setParams(connection);
+        connection.connect();
+        reset();
+        result = new HttpResult(connection);
+    }
+
+    private void setHeaders(HttpURLConnection connection) {
+        for (Map.Entry<String, String> header : headers.entrySet()) {
+            connection.setRequestProperty(header.getKey(), header.getValue());
+        }
+
+        if (credentials != null) {
+            connection.setRequestProperty("Authorization",
+                    "Basic " + Base64.getEncoder().encodeToString(credentials));
         }
     }
 
@@ -110,6 +154,12 @@ public class HttpPage implements Page {
     }
 
     @Override
+    public Page header(String key, String value) {
+        this.headers.put(key, value);
+        return this;
+    }
+
+    @Override
     public Page param(String key, String value) {
         this.params.put(key, value);
         return this;
@@ -123,7 +173,7 @@ public class HttpPage implements Page {
 
     @Override
     public Map<String, String> cookies() {
-        return null;
+        return engine.getCookiesForHost(host);
     }
 
     @Override
@@ -143,16 +193,6 @@ public class HttpPage implements Page {
     }
 
     @Override
-    public byte[] content() {
-        return response.getContent();
-    }
-
-    @Override
-    public String strContent() {
-        return response.getContentAsString();
-    }
-
-    @Override
     public Page get(String path) {
         this.path = path;
         this.method = GET;
@@ -164,6 +204,25 @@ public class HttpPage implements Page {
         this.path = path;
         this.method = POST;
         return this;
+    }
+
+    @Override
+    public Page delete(String path) {
+        this.path = path;
+        this.method = DELETE;
+        return this;
+    }
+
+    @Override
+    public Page put(String path) {
+        this.path = path;
+        this.method = PUT;
+        return this;
+    }
+
+    @Override
+    public Result result() {
+        return result;
     }
 
 }
