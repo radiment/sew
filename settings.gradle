@@ -1,0 +1,6 @@
+rootProject.name = 'simple-engine-for-web'
+include('engine', 'httpclient')
+
+project(':engine').name = 'sew-engine'
+project(':httpclient').name = 'sew-httpclient'
+

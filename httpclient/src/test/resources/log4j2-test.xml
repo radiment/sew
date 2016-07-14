@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="OFF">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%-5level] [%t] %c{1.} - %msg%n"/>
+        </Console>
+</Appenders>
+    <Loggers>
+        <Logger name="org.sew" level="all" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+
+        <logger name="org.apache.logging.log4j" level="OFF"/>
+
+        <Root level="ALL">
+            <AppenderRef ref="Console"/>
+        </Root>
+    </Loggers>
+</Configuration>
