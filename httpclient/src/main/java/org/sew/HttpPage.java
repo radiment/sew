@@ -4,20 +4,19 @@ import org.eclipse.jetty.io.RuntimeIOException;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLEncoder;
+import java.net.*;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.sew.Methods.*;
 
-public class HttpPage implements Page {
+class HttpPage implements Page {
 
     private HttpSewEngine engine;
-    private String protocol = "http";
+    private Protocol protocol = Protocol.HTTP;
     private String host;
     private int port;
     private String rootPath = "/";
@@ -26,8 +25,8 @@ public class HttpPage implements Page {
     private Map<String, String> params;
     private Map<String, String> headers;
     private ResultHandler handler;
-    private Result result;
     private byte[] credentials;
+    private Result result;
 
     HttpPage(HttpSewEngine engine) {
         this.engine = engine;
@@ -37,6 +36,7 @@ public class HttpPage implements Page {
 
     private void reset() {
         params.clear();
+        headers.clear();
     }
 
     @Override
@@ -81,7 +81,7 @@ public class HttpPage implements Page {
     }
 
     private void makeRequest() throws IOException {
-        URL url = new URL(protocol, host, port, makePath());
+        URL url = getUrl();
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod(method.name());
         setHeaders(connection);
@@ -89,6 +89,10 @@ public class HttpPage implements Page {
         connection.connect();
         reset();
         result = new HttpResult(connection);
+    }
+
+    private URL getUrl() throws MalformedURLException {
+        return new URL(protocol.getCode(), host, port, makePath());
     }
 
     private void setHeaders(HttpURLConnection connection) {
@@ -149,8 +153,36 @@ public class HttpPage implements Page {
 
     @Override
     public Page cookie(String key, String value) {
-        engine.getCookiesForHost(host).put(key, value);
+        try {
+            HttpCookie cookie = new HttpCookie(key, value);
+            cookie.setPath("/");
+            engine.cookieManager.getCookieStore().add(getUri(), cookie);
+            return this;
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public Page removeCookie(String key) {
+        try {
+            List<HttpCookie> cookies = engine.cookieManager.getCookieStore().get(getUri());
+            cookies.stream().filter(httpCookie -> key.equals(httpCookie.getName())).findFirst()
+                    .ifPresent(cookie -> {
+                        try {
+                            engine.cookieManager.getCookieStore().remove(getUri(), cookie);
+                        } catch (URISyntaxException e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
         return this;
+    }
+
+    private URI getUri() throws URISyntaxException {
+        return new URI(protocol.getCode(), null, host, port, rootPath, null, null);
     }
 
     @Override
@@ -180,7 +212,7 @@ public class HttpPage implements Page {
     public Page http(String host, int port) {
         this.host = host;
         this.port = port;
-        this.protocol = "http";
+        this.protocol = Protocol.HTTP;
         return this;
     }
 
@@ -188,7 +220,7 @@ public class HttpPage implements Page {
     public Page https(String host, int port) {
         this.host = host;
         this.port = port;
-        this.protocol = "https";
+        this.protocol = Protocol.HTTPS;
         return this;
     }
 
@@ -223,6 +255,21 @@ public class HttpPage implements Page {
     @Override
     public Result result() {
         return result;
+    }
+
+    private enum Protocol {
+        HTTP("http"),
+        HTTPS("https");
+
+        private String code;
+
+        Protocol(String code) {
+            this.code = code;
+        }
+
+        public String getCode() {
+            return code;
+        }
     }
 
 }

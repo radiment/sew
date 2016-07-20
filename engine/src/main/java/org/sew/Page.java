@@ -16,6 +16,8 @@ public interface Page {
 
     Page cookie(String key, String value);
 
+    Page removeCookie(String key);
+
     Page header(String key, String value);
 
     Page param(String key, String value);
